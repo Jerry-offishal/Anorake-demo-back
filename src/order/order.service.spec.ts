@@ -3,6 +3,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { BadRequestException } from '@nestjs/common';
 import { OrderService } from './order.service';
 import { Order } from 'src/schemas/order.schema';
+import { MenuItem } from 'src/schemas/menu-item.schema';
 import { Recipe } from 'src/schemas/recipe.schema';
 import { Product } from 'src/schemas/product.schema';
 import { SocketService } from 'src/socket/socket.service';
@@ -11,6 +12,7 @@ import { MenuItemService } from 'src/menu-item/menu-item.service';
 describe('OrderService', () => {
   let service: OrderService;
   let orderModel: any;
+  let menuItemModel: any;
   let recipeModel: any;
   let productModel: any;
 
@@ -24,7 +26,7 @@ describe('OrderService', () => {
       ...data,
       save: jest
         .fn()
-        .mockResolvedValue({ _id: 'ord1', ...data, status: 'confirmed' }),
+        .mockResolvedValue({ _id: 'ord1', ...data, status: 'pending' }),
     }));
     OrderModelMock.find = jest.fn().mockReturnThis();
     OrderModelMock.findById = jest.fn().mockReturnThis();
@@ -40,6 +42,13 @@ describe('OrderService', () => {
       providers: [
         OrderService,
         { provide: getModelToken(Order.name), useValue: OrderModelMock },
+        {
+          provide: getModelToken(MenuItem.name),
+          useValue: {
+            findById: jest.fn().mockReturnThis(),
+            exec: jest.fn(),
+          },
+        },
         {
           provide: getModelToken(Recipe.name),
           useValue: {
@@ -61,6 +70,7 @@ describe('OrderService', () => {
 
     service = module.get<OrderService>(OrderService);
     orderModel = module.get(getModelToken(Order.name));
+    menuItemModel = module.get(getModelToken(MenuItem.name));
     recipeModel = module.get(getModelToken(Recipe.name));
     productModel = module.get(getModelToken(Product.name));
   });
@@ -72,26 +82,33 @@ describe('OrderService', () => {
   });
 
   describe('create', () => {
-    it('should throw if recipe not found', async () => {
-      recipeModel.findById.mockReturnValue({
+    it('should throw if menu item not found', async () => {
+      menuItemModel.findById.mockReturnValue({
         exec: jest.fn().mockResolvedValue(null),
       });
 
       await expect(
         service.create({
           tenantId: 't1',
-          items: [{ recipeId: 'bad', quantity: 1 }],
+          items: [{ menuItemId: 'bad', quantity: 1 }],
           note: '',
         } as any),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw if insufficient stock', async () => {
+      const menuItem = {
+        _id: 'mi1',
+        price: 5000,
+        recipeId: 'rec1',
+      };
       const recipe = {
         _id: 'rec1',
-        price: 5000,
         ingredients: [{ productId: 'p1', quantity: 10 }],
       };
+      menuItemModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(menuItem),
+      });
       recipeModel.findById.mockReturnValue({
         exec: jest.fn().mockResolvedValue(recipe),
       });
@@ -108,7 +125,7 @@ describe('OrderService', () => {
       await expect(
         service.create({
           tenantId: 't1',
-          items: [{ recipeId: 'rec1', quantity: 1 }],
+          items: [{ menuItemId: 'mi1', quantity: 1 }],
           note: '',
         } as any),
       ).rejects.toThrow('Insufficient stock');

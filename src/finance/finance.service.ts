@@ -4,8 +4,11 @@ import { Model, Types } from 'mongoose';
 import { Revenue } from 'src/schemas/revenue.schema';
 import { Expense } from 'src/schemas/expense.schema';
 import { Order } from 'src/schemas/order.schema';
+import { MenuItem } from 'src/schemas/menu-item.schema';
 import { Recipe } from 'src/schemas/recipe.schema';
 import { Product } from 'src/schemas/product.schema';
+import { Reservation } from 'src/schemas/reservation.schema';
+import { Tables } from 'src/schemas/table.schema';
 import {
   CreateRevenueDto,
   CreateExpenseDto,
@@ -19,27 +22,107 @@ export class FinanceService {
     @InjectModel(Revenue.name) private revenueModel: Model<Revenue>,
     @InjectModel(Expense.name) private expenseModel: Model<Expense>,
     @InjectModel(Order.name) private orderModel: Model<Order>,
+    @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItem>,
     @InjectModel(Recipe.name) private recipeModel: Model<Recipe>,
     @InjectModel(Product.name) private productModel: Model<Product>,
+    @InjectModel(Reservation.name)
+    private reservationModel: Model<Reservation>,
+    @InjectModel(Tables.name) private tableModel: Model<Tables>,
     private readonly socketService: SocketService,
   ) {}
 
   // ─── REVENUES ─────────────────────────────────────────
 
   async createRevenue(body: CreateRevenueDto): Promise<Revenue> {
-    const order = await this.orderModel.findById(body.orderId).exec();
-    if (!order) {
-      throw new BadRequestException('Order not found');
+    if (!body.orderId && !body.reservationId) {
+      throw new BadRequestException(
+        'Either orderId or reservationId is required',
+      );
+    }
+
+    if (body.orderId) {
+      const order = await this.orderModel.findById(body.orderId).exec();
+      if (!order) {
+        throw new BadRequestException('Order not found');
+      }
+
+      const existing = await this.revenueModel
+        .findOne({ tenantId: body.tenantId, orderId: body.orderId })
+        .exec();
+      if (existing) {
+        throw new BadRequestException(
+          'Revenue already recorded for this order',
+        );
+      }
+
+      const revenue = await new this.revenueModel(body).save();
+
+      // Confirm the order upon revenue recording
+      order.status = 'confirmed';
+      await order.save();
+      this.socketService.emitToTenant(body.tenantId, 'order:updated', order);
+
+      this.socketService.emitToTenant(
+        body.tenantId,
+        'finance:revenue:created',
+        revenue,
+      );
+      return revenue;
+    }
+
+    // Reservation revenue
+    const reservation = await this.reservationModel
+      .findById(body.reservationId)
+      .exec();
+    if (!reservation) {
+      throw new BadRequestException('Reservation not found');
     }
 
     const existing = await this.revenueModel
-      .findOne({ tenantId: body.tenantId, orderId: body.orderId })
+      .findOne({
+        tenantId: body.tenantId,
+        reservationId: body.reservationId,
+      })
       .exec();
     if (existing) {
-      throw new BadRequestException('Revenue already recorded for this order');
+      throw new BadRequestException(
+        'Revenue already recorded for this reservation',
+      );
     }
 
     const revenue = await new this.revenueModel(body).save();
+
+    // Confirm the reservation upon revenue recording
+    reservation.status = 'confirmed';
+    await reservation.save();
+    this.socketService.emitToTenant(
+      body.tenantId,
+      'reservation:updated',
+      reservation,
+    );
+
+    // If we are within the reservation time slot, mark the table as occupied
+    const now = new Date();
+    if (
+      now >= new Date(reservation.startAt) &&
+      now <= new Date(reservation.endAt)
+    ) {
+      const table = await this.tableModel
+        .findByIdAndUpdate(
+          reservation.tableId,
+          { status: 'occupied' },
+          { new: true },
+        )
+        .exec();
+      if (table) {
+        this.socketService.emitToTenant(
+          body.tenantId,
+          'table:status_changed',
+          table,
+        );
+      }
+    }
+
     this.socketService.emitToTenant(
       body.tenantId,
       'finance:revenue:created',
@@ -54,6 +137,7 @@ export class FinanceService {
       this.revenueModel
         .find({ tenantId })
         .populate('orderId')
+        .populate('reservationId')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -119,7 +203,7 @@ export class FinanceService {
 
   // ─── COGS (Coût des recettes) ─────────────────────────
 
-  async getRecipeCost(recipeId: string) {
+  async getRecipeCost(recipeId: string, overrideSellingPrice?: number) {
     const recipe = await this.recipeModel
       .findById(recipeId)
       .populate('ingredients.productId')
@@ -153,46 +237,92 @@ export class FinanceService {
       });
     }
 
+    const sellingPrice = overrideSellingPrice ?? recipe.price;
     return {
       recipeId: recipe._id,
       recipeName: recipe.name,
-      sellingPrice: recipe.price,
+      sellingPrice,
       totalCost,
-      profit: recipe.price - totalCost,
+      profit: sellingPrice - totalCost,
       margin:
-        recipe.price > 0
-          ? ((recipe.price - totalCost) / recipe.price) * 100
+        sellingPrice > 0
+          ? ((sellingPrice - totalCost) / sellingPrice) * 100
           : 0,
       details,
     };
   }
 
-  // ─── PROFIT PER PRODUCT ───────────────────────────────
+  // ─── PROFIT PER MENU ITEM ───────────────────────────
 
-  async getProfitByRecipe(tenantId: string) {
-    const recipes = await this.recipeModel.find({ tenantId }).exec();
+  async getProfitByMenuItem(tenantId: string) {
+    // Count confirmed-order quantities per menu item
+    const orderCounts = await this.orderModel.aggregate<{
+      _id: Types.ObjectId;
+      totalOrdered: number;
+    }>([
+      {
+        $match: {
+          tenantId: this.toObjectId(tenantId),
+          status: 'confirmed',
+        },
+      },
+      { $unwind: '$items' },
+      {
+        $group: {
+          _id: '$items.menuItemId',
+          totalOrdered: { $sum: '$items.quantity' },
+        },
+      },
+    ]);
+    const orderedMap = new Map(
+      orderCounts.map((o) => [o._id.toString(), o.totalOrdered]),
+    );
+
+    const menuItems = await this.menuItemModel
+      .find({ tenantId })
+      .populate('recipeId')
+      .exec();
     const results: {
-      recipeId: string;
+      menuItemId: string;
       name: string;
       sellingPrice: number;
       cost: number;
       profit: number;
       margin: number;
+      totalOrdered: number;
+      totalProfit: number;
+      totalRevenue: number;
+      recipeId?: string;
     }[] = [];
 
-    for (const recipe of recipes) {
-      const costData = await this.getRecipeCost(recipe._id.toString());
+    for (const menuItem of menuItems) {
+      let cost = 0;
+      // After populate, recipeId is the Recipe document (or null)
+      const populatedRecipe = menuItem.recipeId as unknown as
+        | (Recipe & { _id: Types.ObjectId })
+        | null;
+      const recipeId = populatedRecipe?._id?.toString();
+      if (recipeId) {
+        const costData = await this.getRecipeCost(recipeId);
+        cost = costData.totalCost;
+      }
+      const profit = menuItem.price - cost;
+      const totalOrdered = orderedMap.get(menuItem._id.toString()) || 0;
       results.push({
-        recipeId: recipe._id.toString(),
-        name: recipe.name,
-        sellingPrice: recipe.price,
-        cost: costData.totalCost,
-        profit: costData.profit,
-        margin: costData.margin,
+        menuItemId: menuItem._id.toString(),
+        name: menuItem.name,
+        sellingPrice: menuItem.price,
+        cost,
+        profit,
+        margin: menuItem.price > 0 ? (profit / menuItem.price) * 100 : 0,
+        totalOrdered,
+        totalProfit: profit * totalOrdered,
+        totalRevenue: menuItem.price * totalOrdered,
+        recipeId,
       });
     }
 
-    return results.sort((a, b) => b.profit - a.profit);
+    return results.sort((a, b) => b.totalProfit - a.totalProfit);
   }
 
   // ─── DASHBOARD ────────────────────────────────────────
@@ -387,7 +517,7 @@ export class FinanceService {
       { $unwind: '$items' },
       {
         $group: {
-          _id: '$items.recipeId',
+          _id: '$items.menuItemId',
           totalQuantity: { $sum: '$items.quantity' },
         },
       },
@@ -395,17 +525,17 @@ export class FinanceService {
       { $limit: 10 },
       {
         $lookup: {
-          from: 'recipes',
+          from: 'menuitems',
           localField: '_id',
           foreignField: '_id',
-          as: 'recipe',
+          as: 'menuItem',
         },
       },
-      { $unwind: '$recipe' },
+      { $unwind: '$menuItem' },
       {
         $project: {
-          recipeId: '$_id',
-          name: '$recipe.name',
+          menuItemId: '$_id',
+          name: '$menuItem.name',
           totalQuantity: 1,
           _id: 0,
         },

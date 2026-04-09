@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Tables } from 'src/schemas/table.schema';
-import { CreateTableDto } from './table.dto';
+import { Tables, TableStatus } from 'src/schemas/table.schema';
+import { CreateTableDto, UpdateTableDto } from './table.dto';
 import { SocketService } from 'src/socket/socket.service';
 
 @Injectable()
@@ -42,6 +42,8 @@ export class TableService {
     tenantId: string,
     page: number,
     limit: number,
+    status?: string,
+    zone?: string,
   ): Promise<{
     data: Tables[];
     page: number;
@@ -49,19 +51,19 @@ export class TableService {
     total: number;
     totalPages: number;
   }> {
-    // Logic to get all items
     const skip = (page - 1) * limit;
     try {
-      const tables = await this.tableModel
-        .find({ tenantId: tenantId })
-        .skip(skip)
-        .limit(limit)
-        .exec();
+      const filter: Record<string, unknown> = { tenantId };
+      if (status) filter.status = status;
+      if (zone) filter.zone = zone;
+
+      const [tables, totalItems] = await Promise.all([
+        this.tableModel.find(filter).skip(skip).limit(limit).exec(),
+        this.tableModel.countDocuments(filter).exec(),
+      ]);
       if (!tables) {
         throw new BadRequestException('No tables found');
       }
-      // calculate total items for pagination
-      const totalItems = await this.tableModel.countDocuments().exec();
       return {
         data: tables,
         page: page,
@@ -72,6 +74,58 @@ export class TableService {
     } catch (error) {
       if (error instanceof Error) {
         throw new BadRequestException('Find all tables error', error.message);
+      } else {
+        throw new BadRequestException('Unknow error');
+      }
+    }
+  }
+
+  async updateTable(tableId: string, body: UpdateTableDto): Promise<Tables> {
+    try {
+      const table = await this.tableModel
+        .findByIdAndUpdate(tableId, body, { new: true })
+        .exec();
+      if (!table) {
+        throw new BadRequestException('Table not found');
+      }
+      this.socketService.emitToTenant(
+        table.tenantId.toString(),
+        'table:updated',
+        table,
+      );
+      return table;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new BadRequestException('Update table error: ', error.message);
+      } else {
+        throw new BadRequestException('Unknow error');
+      }
+    }
+  }
+
+  async updateTableStatus(tableId: string, status: string): Promise<Tables> {
+    try {
+      if (!Object.values(TableStatus).includes(status as TableStatus)) {
+        throw new BadRequestException('Invalid table status');
+      }
+      const table = await this.tableModel
+        .findByIdAndUpdate(tableId, { status }, { new: true })
+        .exec();
+      if (!table) {
+        throw new BadRequestException('Table not found');
+      }
+      this.socketService.emitToTenant(
+        table.tenantId.toString(),
+        'table:status_changed',
+        table,
+      );
+      return table;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new BadRequestException(
+          'Update table status error: ',
+          error.message,
+        );
       } else {
         throw new BadRequestException('Unknow error');
       }

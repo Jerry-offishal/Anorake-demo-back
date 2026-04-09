@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Order } from 'src/schemas/order.schema';
+import { MenuItem } from 'src/schemas/menu-item.schema';
 import { Recipe } from 'src/schemas/recipe.schema';
 import { Product } from 'src/schemas/product.schema';
 import { CreateOrderDto, UpdateOrderDto } from './order.dto';
@@ -12,6 +13,7 @@ import { MenuItemService } from 'src/menu-item/menu-item.service';
 export class OrderService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<Order>,
+    @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItem>,
     @InjectModel(Recipe.name) private recipeModel: Model<Recipe>,
     @InjectModel(Product.name) private productModel: Model<Product>,
     private readonly socketService: SocketService,
@@ -22,42 +24,51 @@ export class OrderService {
     let totalPrice = 0;
     const affectedProductIds: string[] = [];
 
-    // Validate recipes and compute total price
+    // Validate menu items and compute total price
     for (const item of body.items) {
-      const recipe = await this.recipeModel.findById(item.recipeId).exec();
-      if (!recipe) {
-        throw new BadRequestException(`Recipe ${item.recipeId} not found`);
+      const menuItem = await this.menuItemModel
+        .findById(item.menuItemId)
+        .exec();
+      if (!menuItem) {
+        throw new BadRequestException(`Menu item ${item.menuItemId} not found`);
       }
-      totalPrice += (recipe.price || 0) * item.quantity;
+      totalPrice += (menuItem.price || 0) * item.quantity;
 
-      // Auto-decrement stock for each ingredient
-      for (const ingredient of recipe.ingredients) {
-        const qtyToRemove = ingredient.quantity * item.quantity;
-        const product = await this.productModel
-          .findById(ingredient.productId)
+      // If the menu item is linked to a recipe, auto-decrement stock
+      if (menuItem.recipeId) {
+        const recipe = await this.recipeModel
+          .findById(menuItem.recipeId)
           .exec();
-        if (!product) {
-          throw new BadRequestException(
-            `Product ${String(ingredient.productId)} not found`,
-          );
-        }
-        if (product.quantity < qtyToRemove) {
-          throw new BadRequestException(
-            `Insufficient stock for "${product.name}" (available: ${product.quantity}, required: ${qtyToRemove})`,
-          );
-        }
-        product.quantity -= qtyToRemove;
-        await product.save();
-        affectedProductIds.push(product._id.toString());
+        if (recipe) {
+          for (const ingredient of recipe.ingredients) {
+            const qtyToRemove = ingredient.quantity * item.quantity;
+            const product = await this.productModel
+              .findById(ingredient.productId)
+              .exec();
+            if (!product) {
+              throw new BadRequestException(
+                `Product ${String(ingredient.productId)} not found`,
+              );
+            }
+            if (product.quantity < qtyToRemove) {
+              throw new BadRequestException(
+                `Insufficient stock for "${product.name}" (available: ${product.quantity}, required: ${qtyToRemove})`,
+              );
+            }
+            product.quantity -= qtyToRemove;
+            await product.save();
+            affectedProductIds.push(product._id.toString());
 
-        // Emit alert if below threshold
-        if (product.quantity <= product.alertThreshold) {
-          this.socketService.emitToTenant(body.tenantId, 'stock:alert', {
-            productId: product._id,
-            name: product.name,
-            quantity: product.quantity,
-            alertThreshold: product.alertThreshold,
-          });
+            // Emit alert if below threshold
+            if (product.quantity <= product.alertThreshold) {
+              this.socketService.emitToTenant(body.tenantId, 'stock:alert', {
+                productId: product._id,
+                name: product.name,
+                quantity: product.quantity,
+                alertThreshold: product.alertThreshold,
+              });
+            }
+          }
         }
       }
     }
@@ -65,7 +76,7 @@ export class OrderService {
     const order = await new this.orderModel({
       ...body,
       totalPrice,
-      status: 'confirmed',
+      status: 'pending',
     }).save();
 
     this.socketService.emitToTenant(body.tenantId, 'order:created', order);
@@ -95,7 +106,7 @@ export class OrderService {
     const [data, total] = await Promise.all([
       this.orderModel
         .find({ tenantId })
-        .populate('items.recipeId')
+        .populate('items.menuItemId')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -114,7 +125,7 @@ export class OrderService {
   async findById(id: string): Promise<Order> {
     const order = await this.orderModel
       .findById(id)
-      .populate('items.recipeId')
+      .populate('items.menuItemId')
       .exec();
     if (!order) {
       throw new BadRequestException('Order not found');

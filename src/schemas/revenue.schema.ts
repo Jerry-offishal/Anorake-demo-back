@@ -6,8 +6,19 @@ export class Revenue extends Document {
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Tenant', required: true })
   tenantId: Types.ObjectId;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Order', required: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'Order',
+    required: false,
+  })
   orderId: Types.ObjectId;
+
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'Reservation',
+    required: false,
+  })
+  reservationId: Types.ObjectId;
 
   @Prop({ required: true }) amount: number;
 
@@ -21,4 +32,17 @@ export class Revenue extends Document {
 
 export const RevenueSchema = SchemaFactory.createForClass(Revenue);
 RevenueSchema.index({ tenantId: 1 });
-RevenueSchema.index({ tenantId: 1, orderId: 1 }, { unique: true });
+RevenueSchema.index(
+  { tenantId: 1, orderId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { orderId: { $exists: true, $ne: null } },
+  },
+);
+RevenueSchema.index(
+  { tenantId: 1, reservationId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { reservationId: { $exists: true, $ne: null } },
+  },
+);

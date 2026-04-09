@@ -4,6 +4,7 @@ import {
   IsIn,
   IsISO8601,
   IsNotEmpty,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
@@ -70,4 +71,8 @@ export class createReservationDto {
 
   @IsISO8601()
   endAt: string;
+
+  @IsOptional()
+  @IsNumber()
+  price: number;
 }

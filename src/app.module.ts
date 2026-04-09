@@ -17,11 +17,15 @@ import { MenuCategoryModule } from './menu-category/menu-category.module';
 import { MenuItemModule } from './menu-item/menu-item.module';
 import { MenuComboModule } from './menu-combo/menu-combo.module';
 import { FinanceModule } from './finance/finance.module';
+import { SettingsModule } from './settings/settings.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AppGateway } from './app.gateway';
 import { SocketModle } from './socket/socket.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { PoliciesGuard } from './casl/policies.guard';
 
 @Module({
   imports: [
@@ -40,7 +44,9 @@ import { APP_GUARD } from '@nestjs/core';
     MenuItemModule,
     MenuComboModule,
     FinanceModule,
+    SettingsModule,
     SocketModle,
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       expandVariables: true,
@@ -65,6 +71,8 @@ import { APP_GUARD } from '@nestjs/core';
     AppService,
     AppGateway,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PoliciesGuard },
   ],
 })
 export class AppModule {}

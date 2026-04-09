@@ -12,7 +12,7 @@ import { Type } from 'class-transformer';
 class OrderItemDto {
   @IsNotEmpty()
   @IsString()
-  recipeId: string;
+  menuItemId: string;
 
   @IsNotEmpty()
   @IsNumber()

@@ -4,6 +4,7 @@ import { StockEntry, StockEntrySchema } from 'src/schemas/stock-entry.schema';
 import { Product, ProductSchema } from 'src/schemas/product.schema';
 import { StockEntryController } from './stock-entry.controller';
 import { StockEntryService } from './stock-entry.service';
+import { FinanceModule } from 'src/finance/finance.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { StockEntryService } from './stock-entry.service';
       { name: StockEntry.name, schema: StockEntrySchema },
       { name: Product.name, schema: ProductSchema },
     ]),
+    FinanceModule,
   ],
   controllers: [StockEntryController],
   providers: [StockEntryService],

@@ -51,12 +51,16 @@ describe('TableController', () => {
       const result = await controller.findAllForUser(
         undefined as any,
         undefined as any,
+        undefined as any,
+        undefined as any,
         't1',
       );
       expect(mockTableService.findAllForTables).toHaveBeenCalledWith(
         't1',
         1,
         10,
+        undefined,
+        undefined,
       );
       expect(result).toEqual(paginated);
     });

@@ -5,18 +5,30 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { Auth, AuthSchema } from 'src/schemas/auth.schema';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { Users, UserSchema } from 'src/schemas/user.schema';
+import {
+  Organization,
+  OrganizationSchema,
+} from 'src/schemas/organization.schema';
+import { JwtStrategy } from './jwt.strategy';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Auth.name, schema: AuthSchema }]),
     MongooseModule.forFeature([{ name: Users.name, schema: UserSchema }]),
+    MongooseModule.forFeature([
+      { name: Organization.name, schema: OrganizationSchema },
+    ]),
     PassportModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'super-secret-key',
+    JwtModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.get<string>('JWT_SECRET', 'super-secret-key'),
+      }),
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, JwtStrategy],
 })
 export class AuthModule {}

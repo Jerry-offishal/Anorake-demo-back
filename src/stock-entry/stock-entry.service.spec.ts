@@ -4,6 +4,7 @@ import { StockEntryService } from './stock-entry.service';
 import { StockEntry } from 'src/schemas/stock-entry.schema';
 import { Product } from 'src/schemas/product.schema';
 import { SocketService } from 'src/socket/socket.service';
+import { FinanceService } from 'src/finance/finance.service';
 
 describe('StockEntryService', () => {
   let service: StockEntryService;
@@ -11,6 +12,7 @@ describe('StockEntryService', () => {
   let productModel: any;
 
   const mockSocketService = { emitToTenant: jest.fn() };
+  const mockFinanceService = { createExpense: jest.fn().mockResolvedValue({}) };
 
   beforeEach(async () => {
     const StockEntryModelMock: any = jest.fn().mockImplementation((data) => ({
@@ -40,6 +42,7 @@ describe('StockEntryService', () => {
           },
         },
         { provide: SocketService, useValue: mockSocketService },
+        { provide: FinanceService, useValue: mockFinanceService },
       ],
     }).compile();
 
@@ -72,6 +75,8 @@ describe('StockEntryService', () => {
     it('should create stock entry and increment product quantity', async () => {
       const product = {
         _id: 'p1',
+        name: 'Poulet',
+        unit: 'kg',
         quantity: 5,
         save: jest.fn().mockResolvedValue(true),
       };
@@ -79,11 +84,24 @@ describe('StockEntryService', () => {
         exec: jest.fn().mockResolvedValue(product),
       });
 
-      const dto = { productId: 'p1', tenantId: 't1', quantityAdded: 10 };
+      const dto = {
+        productId: 'p1',
+        tenantId: 't1',
+        quantityAdded: 10,
+        price: 5000,
+      };
       await service.create(dto as any);
 
       expect(product.quantity).toBe(15);
       expect(product.save).toHaveBeenCalled();
+      expect(mockFinanceService.createExpense).toHaveBeenCalledWith({
+        tenantId: 't1',
+        name: 'Approvisionnement: Poulet (10 kg)',
+        amount: 5000,
+        category: 'supply',
+        note: '',
+        stockEntryId: expect.any(String),
+      });
       expect(mockSocketService.emitToTenant).toHaveBeenCalledWith(
         't1',
         'stock:updated',

@@ -27,6 +27,7 @@ export class Reservation extends Document {
   @Prop({ required: true, type: Metadata }) metadata: Metadata;
   @Prop({ required: true, type: Date }) startAt: Date;
   @Prop({ required: true, type: Date }) endAt: Date;
+  @Prop({ required: false, default: 0 }) price: number;
 }
 
 export const ReservationSchema = SchemaFactory.createForClass(Reservation);

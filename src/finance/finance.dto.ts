@@ -13,9 +13,13 @@ export class CreateRevenueDto {
   @IsString()
   tenantId: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
   orderId: string;
+
+  @IsOptional()
+  @IsString()
+  reservationId: string;
 
   @IsNotEmpty()
   @IsNumber()
@@ -44,12 +48,16 @@ export class CreateExpenseDto {
 
   @IsNotEmpty()
   @IsString()
-  @IsIn(['food', 'rent', 'salary', 'utilities', 'equipment', 'other'])
+  @IsIn(['food', 'rent', 'salary', 'utilities', 'equipment', 'supply', 'other'])
   category: string;
 
   @IsOptional()
   @IsString()
   note: string;
+
+  @IsOptional()
+  @IsString()
+  stockEntryId: string;
 }
 
 export class UpdateExpenseDto {
@@ -63,7 +71,7 @@ export class UpdateExpenseDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['food', 'rent', 'salary', 'utilities', 'equipment', 'other'])
+  @IsIn(['food', 'rent', 'salary', 'utilities', 'equipment', 'supply', 'other'])
   category: string;
 
   @IsOptional()

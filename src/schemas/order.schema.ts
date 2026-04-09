@@ -3,8 +3,12 @@ import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 
 @Schema({ _id: false })
 class OrderItem {
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Recipe', required: true })
-  recipeId: Types.ObjectId;
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'MenuItem',
+    required: true,
+  })
+  menuItemId: Types.ObjectId;
 
   @Prop({ required: true }) quantity: number;
 }

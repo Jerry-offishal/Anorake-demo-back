@@ -12,11 +12,26 @@ export class Expense extends Document {
 
   @Prop({
     required: true,
-    enum: ['food', 'rent', 'salary', 'utilities', 'equipment', 'other'],
+    enum: [
+      'food',
+      'rent',
+      'salary',
+      'utilities',
+      'equipment',
+      'supply',
+      'other',
+    ],
   })
   category: string;
 
   @Prop({ required: false, default: '' }) note: string;
+
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'StockEntry',
+    required: false,
+  })
+  stockEntryId: Types.ObjectId;
 }
 
 export const ExpenseSchema = SchemaFactory.createForClass(Expense);

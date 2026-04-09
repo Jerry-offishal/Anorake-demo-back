@@ -6,7 +6,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Auth } from 'src/schemas/auth.schema';
-import { AuthDto } from './auth.dto';
+import { AuthDto, SignupDto } from './auth.dto';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { Users } from 'src/schemas/user.schema';
@@ -73,7 +73,7 @@ export class AuthService {
       }
 
       const payload = {
-        id: auth._id,
+        id: currentUser._id,
         email: auth.email,
       };
 
@@ -84,6 +84,54 @@ export class AuthService {
       } else {
         throw new BadRequestException('Unknow error');
       }
+    }
+  }
+
+  async signup(
+    body: SignupDto,
+  ): Promise<{ access_token: string; data: Users }> {
+    try {
+      const existAuth = await this.AuthModel.findOne({
+        email: body.email,
+      }).exec();
+      if (existAuth) {
+        throw new BadRequestException('Account already exists');
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(body.password, salt);
+
+      const auth = await new this.AuthModel({
+        email: body.email,
+        passwordHash: hashedPassword,
+      }).save();
+      if (!auth) {
+        throw new BadRequestException('Auth could not be created');
+      }
+
+      const user = await new this.UserModel({
+        firstName: body.firstName,
+        lastName: body.lastName,
+        email: body.email,
+        avatar: body.avatar || '',
+      }).save();
+      if (!user) {
+        // Rollback auth if user creation fails
+        await this.AuthModel.findByIdAndDelete(auth._id).exec();
+        throw new BadRequestException('User could not be created');
+      }
+
+      const payload = {
+        id: user._id,
+        email: user.email,
+      };
+
+      return { access_token: this.generateToken(payload), data: user };
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new BadRequestException('Signup error: ' + error.message);
+      }
+      throw new BadRequestException('Unknown error');
     }
   }
 }

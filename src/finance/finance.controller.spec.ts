@@ -11,6 +11,7 @@ const mockFinanceService = {
   deleteExpense: jest.fn(),
   getRecipeCost: jest.fn(),
   getProfitByRecipe: jest.fn(),
+  getProfitByMenuItem: jest.fn(),
   getDashboard: jest.fn(),
   getDailyAnalysis: jest.fn(),
 };
@@ -129,16 +130,19 @@ describe('FinanceController', () => {
       const cost = { totalCost: 3000, profit: 2000 };
       mockFinanceService.getRecipeCost.mockResolvedValue(cost);
       const result = await controller.getRecipeCost('rec1');
-      expect(mockFinanceService.getRecipeCost).toHaveBeenCalledWith('rec1');
+      expect(mockFinanceService.getRecipeCost).toHaveBeenCalledWith(
+        'rec1',
+        undefined,
+      );
       expect(result).toEqual(cost);
     });
   });
 
-  describe('getProfitByRecipe', () => {
-    it('should call financeService.getProfitByRecipe', async () => {
-      mockFinanceService.getProfitByRecipe.mockResolvedValue([]);
-      await controller.getProfitByRecipe('t1');
-      expect(mockFinanceService.getProfitByRecipe).toHaveBeenCalledWith('t1');
+  describe('getProfitByMenuItem', () => {
+    it('should call financeService.getProfitByMenuItem', async () => {
+      mockFinanceService.getProfitByMenuItem.mockResolvedValue([]);
+      await controller.getProfitByMenuItem('t1');
+      expect(mockFinanceService.getProfitByMenuItem).toHaveBeenCalledWith('t1');
     });
   });
 

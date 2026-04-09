@@ -5,8 +5,11 @@ import { FinanceService } from './finance.service';
 import { Revenue } from 'src/schemas/revenue.schema';
 import { Expense } from 'src/schemas/expense.schema';
 import { Order } from 'src/schemas/order.schema';
+import { MenuItem } from 'src/schemas/menu-item.schema';
 import { Recipe } from 'src/schemas/recipe.schema';
 import { Product } from 'src/schemas/product.schema';
+import { Reservation } from 'src/schemas/reservation.schema';
+import { Tables } from 'src/schemas/table.schema';
 import { SocketService } from 'src/socket/socket.service';
 
 const TENANT_ID = '507f1f77bcf86cd799439011';
@@ -48,8 +51,11 @@ describe('FinanceService', () => {
         { provide: getModelToken(Revenue.name), useFactory: mockModel },
         { provide: getModelToken(Expense.name), useFactory: mockModel },
         { provide: getModelToken(Order.name), useFactory: mockModel },
+        { provide: getModelToken(MenuItem.name), useFactory: mockModel },
         { provide: getModelToken(Recipe.name), useFactory: mockModel },
         { provide: getModelToken(Product.name), useFactory: mockModel },
+        { provide: getModelToken(Reservation.name), useFactory: mockModel },
+        { provide: getModelToken(Tables.name), useFactory: mockModel },
         { provide: SocketService, useValue: mockSocketService },
       ],
     }).compile();
@@ -88,10 +94,12 @@ describe('FinanceService', () => {
       const revenues = [{ _id: 'r1', amount: 5000 }];
       revenueModel.find.mockReturnValue({
         populate: jest.fn().mockReturnValue({
-          sort: jest.fn().mockReturnValue({
-            skip: jest.fn().mockReturnValue({
-              limit: jest.fn().mockReturnValue({
-                exec: jest.fn().mockResolvedValue(revenues),
+          populate: jest.fn().mockReturnValue({
+            sort: jest.fn().mockReturnValue({
+              skip: jest.fn().mockReturnValue({
+                limit: jest.fn().mockReturnValue({
+                  exec: jest.fn().mockResolvedValue(revenues),
+                }),
               }),
             }),
           }),

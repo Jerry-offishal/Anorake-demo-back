@@ -29,7 +29,7 @@ describe('OrderController', () => {
     it('should call orderService.create', async () => {
       const dto = {
         tenantId: 't1',
-        items: [{ recipeId: 'r1', quantity: 2 }],
+        items: [{ menuItemId: 'mi1', quantity: 2 }],
         note: '',
       };
       mockOrderService.create.mockResolvedValue({ _id: 'ord1', ...dto });
