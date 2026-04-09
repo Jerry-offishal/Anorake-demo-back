@@ -10,7 +10,7 @@ async function bootstrap() {
       process.env.NODE_ENV === 'production'
         ? ['https://tonsite.com']
         : ['http://localhost:3000'],
-    credentials: true,
+    credentials: true, 
   });
 
   app.useGlobalPipes(
