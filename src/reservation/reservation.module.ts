@@ -15,5 +15,6 @@ import { Tables, TableSchema } from 'src/schemas/table.schema';
   ],
   controllers: [ReservationController],
   providers: [ReservationService, ReservationCronService],
+  exports: [ReservationService],
 })
 export class ReservationModule {}

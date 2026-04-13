@@ -20,5 +20,6 @@ import { MenuItemModule } from 'src/menu-item/menu-item.module';
   ],
   controllers: [OrderController],
   providers: [OrderService],
+  exports: [OrderService],
 })
 export class OrderModule {}

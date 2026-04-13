@@ -3,6 +3,12 @@ import { getModelToken } from '@nestjs/mongoose';
 import { BadRequestException } from '@nestjs/common';
 import { TenantService } from './tenant.service';
 import { Tenant } from 'src/schemas/tenant.schema';
+import { FinanceService } from 'src/finance/finance.service';
+import { ReservationService } from 'src/reservation/reservation.service';
+import { OrderService } from 'src/order/order.service';
+import { ProductService } from 'src/product/product.service';
+import { MenuItemService } from 'src/menu-item/menu-item.service';
+import { SettingsService } from 'src/settings/settings.service';
 
 describe('TenantService', () => {
   let service: TenantService;
@@ -25,6 +31,12 @@ describe('TenantService', () => {
       providers: [
         TenantService,
         { provide: getModelToken(Tenant.name), useValue: TenantModelMock },
+        { provide: FinanceService, useValue: {} },
+        { provide: ReservationService, useValue: {} },
+        { provide: OrderService, useValue: {} },
+        { provide: ProductService, useValue: {} },
+        { provide: MenuItemService, useValue: {} },
+        { provide: SettingsService, useValue: {} },
       ],
     }).compile();
 

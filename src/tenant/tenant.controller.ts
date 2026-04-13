@@ -24,6 +24,13 @@ export class TenantController {
     return this.TenantService.findAllForTenant(page || 1, limit || 10);
   }
 
+  @Get(':id/overview')
+  @ApiOperation({ summary: 'Données complètes overview' })
+  @CheckPolicies({ action: Action.Read, subject: Subject.Tenant })
+  getOverview(@Param('id') tenantId: string) {
+    return this.TenantService.getOverview(tenantId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Récupérer un tenant par ID' })
   @CheckPolicies({ action: Action.Read, subject: Subject.Tenant })
